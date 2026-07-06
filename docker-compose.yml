@@ -1,0 +1,41 @@
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: asset-mysql
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: assetdb
+    ports:
+      - "3307:3306"
+    volumes:
+      - asset-mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  asset-service:
+    build: .
+    container_name: asset-service
+    restart: always
+    depends_on:
+      mysql:
+        condition: service_healthy
+    ports:
+      - "8082:8082"
+    environment:
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_NAME: assetdb
+      DB_USERNAME: root
+      DB_PASSWORD: root
+      EUREKA_ENABLED: "false"        # set true once eureka-server container/URL is available
+      EUREKA_URL: http://eureka-server:8761/eureka/
+      JWT_ENABLED: "false"
+      JWT_SECRET: change-this-to-a-long-random-shared-secret-min-32-chars
+      INTERNAL_API_KEY: change-this-internal-service-key
+
+volumes:
+  asset-mysql-data:

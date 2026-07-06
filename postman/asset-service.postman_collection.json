@@ -1,0 +1,153 @@
+{
+  "info": {
+    "name": "Asset Service",
+    "description": "Postman collection for asset-service. Set the {{baseUrl}} variable to http://localhost:8082 (direct) or http://localhost:8080/asset-service (via gateway, if routed).",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8082" },
+    { "key": "internalApiKey", "value": "change-this-internal-service-key" },
+    { "key": "assetId", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "Create Asset",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "url": "{{baseUrl}}/assets",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"assetName\": \"Dell Latitude 5440\",\n  \"assetType\": \"LAPTOP\",\n  \"serialNumber\": \"SN-LAP-1001\",\n  \"status\": \"AVAILABLE\"\n}"
+        }
+      }
+    },
+    {
+      "name": "Get All Assets (paged)",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/assets?page=0&size=5&sortBy=assetName"
+      }
+    },
+    {
+      "name": "Get Asset By Id",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/assets/{{assetId}}"
+      }
+    },
+    {
+      "name": "Search Assets",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/assets/search?keyword=Dell&page=0&size=5&sortBy=assetName"
+      }
+    },
+    {
+      "name": "Update Asset (full)",
+      "request": {
+        "method": "PUT",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "url": "{{baseUrl}}/assets/{{assetId}}",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"assetName\": \"Dell Latitude 5440\",\n  \"assetType\": \"LAPTOP\",\n  \"serialNumber\": \"SN-LAP-1001\",\n  \"status\": \"AVAILABLE\"\n}"
+        }
+      }
+    },
+    {
+      "name": "Patch Asset (partial)",
+      "request": {
+        "method": "PATCH",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "url": "{{baseUrl}}/assets/{{assetId}}",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"assetName\": \"Dell Latitude 5440 (Refurbished)\"\n}"
+        }
+      }
+    },
+    {
+      "name": "Update Status (INTERNAL - used by assignment/maintenance service)",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "X-Internal-Api-Key", "value": "{{internalApiKey}}" }
+        ],
+        "url": "{{baseUrl}}/assets/{{assetId}}/status",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"status\": \"ASSIGNED\",\n  \"reason\": \"Assigned to employee EMP-204 by assignment-service\"\n}"
+        }
+      }
+    },
+    {
+      "name": "Get Asset History",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/assets/{{assetId}}/history?page=0&size=10"
+      }
+    },
+    {
+      "name": "Get Assets By Status",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/assets/status/AVAILABLE?page=0&size=5"
+      }
+    },
+    {
+      "name": "Get Assets By Type",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/assets/type/LAPTOP?page=0&size=5"
+      }
+    },
+    {
+      "name": "Dashboard Summary",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/assets/dashboard/summary"
+      }
+    },
+    {
+      "name": "Bulk Create (JSON)",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "url": "{{baseUrl}}/assets/bulk",
+        "body": {
+          "mode": "raw",
+          "raw": "[\n  { \"assetName\": \"HP EliteBook\", \"assetType\": \"LAPTOP\", \"serialNumber\": \"SN-LAP-1002\" },\n  { \"assetName\": \"Logitech MX Master\", \"assetType\": \"PERIPHERAL\", \"serialNumber\": \"SN-PER-2001\" }\n]"
+        }
+      }
+    },
+    {
+      "name": "Bulk Upload (Excel)",
+      "request": {
+        "method": "POST",
+        "url": "{{baseUrl}}/assets/bulk/upload",
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            { "key": "file", "type": "file", "src": [] }
+          ]
+        }
+      }
+    },
+    {
+      "name": "Delete Asset (soft delete)",
+      "request": {
+        "method": "DELETE",
+        "url": "{{baseUrl}}/assets/{{assetId}}"
+      }
+    },
+    {
+      "name": "Health Check (Actuator)",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/actuator/health"
+      }
+    }
+  ]
+}
