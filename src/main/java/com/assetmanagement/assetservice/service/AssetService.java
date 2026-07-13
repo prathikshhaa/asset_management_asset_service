@@ -7,6 +7,7 @@ import com.assetmanagement.assetservice.exception.DuplicateAssetException;
 import com.assetmanagement.assetservice.exception.FileProcessingException;
 import com.assetmanagement.assetservice.exception.ResourceNotFoundException;
 import com.assetmanagement.assetservice.repository.AssetRepository;
+import com.assetmanagement.assetservice.specification.AssetSpecification;
 import com.assetmanagement.assetservice.util.AssetMapper;
 import com.assetmanagement.assetservice.util.ExcelAssetParser;
 import lombok.RequiredArgsConstructor;
@@ -28,31 +29,75 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
+
 @Service
 @RequiredArgsConstructor
 public class AssetService {
 
+    private final FileStorageService fileStorageService;
+
     private final AssetRepository assetRepository;
 
-    @Transactional
-    public AssetResponseDTO createAsset(AssetRequestDTO requestDTO) {
-        if (assetRepository.existsBySerialNumber(requestDTO.getSerialNumber())) {
-            throw new DuplicateAssetException(
-                    "Asset with Serial Number " + requestDTO.getSerialNumber() + " already exists");
+    private void validateAsset(AssetRequestDTO requestDTO){
+        if (requestDTO.getPurchaseDate() != null &&
+                requestDTO.getWarrantyExpiry() != null &&
+                requestDTO.getWarrantyExpiry().isBefore(requestDTO.getPurchaseDate())) {
+
+            throw new IllegalArgumentException(
+                    "Warranty expiry date cannot be before purchase date.");
         }
-        Asset asset = AssetMapper.toEntity(requestDTO);
-        Asset saved = assetRepository.save(asset);
-        return AssetMapper.toResponseDTO(saved);
+
+        if (requestDTO.getPurchasePrice() != null &&
+                requestDTO.getPurchasePrice().signum() < 0) {
+
+            throw new IllegalArgumentException(
+                    "Purchase price cannot be negative.");
+        }
     }
 
-    public Page<AssetResponseDTO> getAllAssets(int page, int size, String sortBy) {
-        Pageable pageable = PageRequest.of(page, size, Sort.by(sortBy));
+
+    @Transactional
+    public AssetResponseDTO createAsset(AssetRequestDTO requestDTO,
+                                        MultipartFile image) {
+
+        if (assetRepository.existsBySerialNumber(requestDTO.getSerialNumber())) {
+            throw new DuplicateAssetException(
+                    "Asset with Serial Number " +
+                            requestDTO.getSerialNumber() +
+                            " already exists");
+        }
+
+        validateAsset(requestDTO);
+
+        Asset asset = AssetMapper.toEntity(requestDTO);
+
+        if (image != null && !image.isEmpty()) {
+            String imageUrl = fileStorageService.store(image);
+            asset.setImageUrl(imageUrl);
+        }
+
+
+        Asset saved = assetRepository.save(asset);
+
+        return AssetMapper.toResponseDTO(saved);
+    }
+    public Page<AssetResponseDTO> getAllAssets(int page,
+                                               int size,
+                                               String sortBy) {
+
+        Pageable pageable = PageRequest.of(
+                page,
+                size,
+                Sort.by(sortBy));
+
         return assetRepository.findAll(pageable)
                 .map(AssetMapper::toResponseDTO);
     }
 
     public AssetResponseDTO getAssetById(UUID id) {
+
         Asset asset = findAssetOrThrow(id);
+
         return AssetMapper.toResponseDTO(asset);
     }
 
@@ -81,55 +126,64 @@ public class AssetService {
                 .map(AssetMapper::toResponseDTO);
     }
 
-    public Page<AssetResponseDTO> searchAssets(String keyword, int page, int size, String sortBy) {
-        Pageable pageable = PageRequest.of(page, size, Sort.by(sortBy));
+    public Page<AssetResponseDTO> searchAssets(
+            String keyword,
+            int page,
+            int size,
+            String sortBy) {
+
+        Pageable pageable =
+                PageRequest.of(page, size, Sort.by(sortBy));
+
         return assetRepository
-                .findByAssetNameContainingIgnoreCase(keyword, pageable)
+                .findByAssetNameContainingIgnoreCaseOrBrandContainingIgnoreCaseOrModelContainingIgnoreCaseOrManufacturerContainingIgnoreCaseOrSerialNumberContainingIgnoreCase(
+                        keyword,
+                        keyword,
+                        keyword,
+                        keyword,
+                        keyword,
+                        pageable)
                 .map(AssetMapper::toResponseDTO);
     }
 
     @Transactional
-    public AssetResponseDTO updateAsset(UUID id, AssetRequestDTO requestDTO) {
+    public AssetResponseDTO updateAsset(UUID id,
+                                        AssetRequestDTO requestDTO) {
+
         Asset existing = findAssetOrThrow(id);
 
-        if (!existing.getSerialNumber().equals(requestDTO.getSerialNumber())
-                && assetRepository.existsBySerialNumberAndIdNot(requestDTO.getSerialNumber(), id)) {
-            throw new DuplicateAssetException(
-                    "Asset with Serial Number " + requestDTO.getSerialNumber() + " already exists");
+        if (existing.isDeleted()) {
+            throw new IllegalArgumentException(
+                    "Deleted assets cannot be updated.");
         }
 
-        existing.setAssetName(requestDTO.getAssetName());
-        existing.setAssetType(requestDTO.getAssetType());
-        existing.setSerialNumber(requestDTO.getSerialNumber());
-        existing.setStatus(requestDTO.getStatus() != null ? requestDTO.getStatus() : existing.getStatus());
+        validateAsset(requestDTO);
+
+        AssetMapper.updateEntity(existing, requestDTO);
+
+
+        existing.setLastModifiedBy(currentCaller());
 
         Asset updated = assetRepository.save(existing);
+
         return AssetMapper.toResponseDTO(updated);
     }
 
     @Transactional
-    public AssetResponseDTO patchAsset(UUID id, AssetUpdateDTO updateDTO) {
+    public AssetResponseDTO patchAsset(UUID id,
+                                       AssetUpdateDTO updateDTO) {
         Asset existing = findAssetOrThrow(id);
 
-        if (StringUtils.hasText(updateDTO.getAssetName())) {
-            existing.setAssetName(updateDTO.getAssetName());
-        }
-        if (StringUtils.hasText(updateDTO.getAssetType())) {
-            existing.setAssetType(updateDTO.getAssetType());
-        }
-        if (StringUtils.hasText(updateDTO.getSerialNumber())
-                && !updateDTO.getSerialNumber().equals(existing.getSerialNumber())) {
-            if (assetRepository.existsBySerialNumberAndIdNot(updateDTO.getSerialNumber(), id)) {
-                throw new DuplicateAssetException(
-                        "Asset with Serial Number " + updateDTO.getSerialNumber() + " already exists");
-            }
-            existing.setSerialNumber(updateDTO.getSerialNumber());
-        }
-        if (updateDTO.getStatus() != null) {
-            existing.setStatus(updateDTO.getStatus());
+        if (existing.isDeleted()) {
+            throw new IllegalArgumentException("Deleted assets cannot be updated.");
         }
 
+        AssetMapper.patchEntity(existing, updateDTO);
+
+        existing.setLastModifiedBy(currentCaller());
+
         Asset updated = assetRepository.save(existing);
+
         return AssetMapper.toResponseDTO(updated);
     }
 
@@ -141,7 +195,6 @@ public class AssetService {
         AssetStatus previousStatus = existing.getStatus();
         AssetStatus newStatus = statusUpdateDTO.getStatus();
 
-
         if (previousStatus == newStatus) {
             throw new IllegalArgumentException(
                     "Asset is already in " + newStatus + " status.");
@@ -150,15 +203,16 @@ public class AssetService {
         switch (previousStatus) {
 
             case AVAILABLE -> {
-                if (newStatus != AssetStatus.ASSIGNED) {
+                if(newStatus != AssetStatus.ASSIGNED &&
+                        newStatus != AssetStatus.MAINTENANCE) {
                     throw new IllegalArgumentException(
-                            "AVAILABLE assets can only be changed to ASSIGNED.");
+                            "AVAILABLE assets can only be changed to ASSIGNED or MAINTENANCE.");
                 }
             }
 
             case ASSIGNED -> {
-                if (newStatus != AssetStatus.AVAILABLE
-                        && newStatus != AssetStatus.MAINTENANCE) {
+                if (newStatus != AssetStatus.AVAILABLE &&
+                        newStatus != AssetStatus.MAINTENANCE) {
                     throw new IllegalArgumentException(
                             "ASSIGNED assets can only be changed to AVAILABLE or MAINTENANCE.");
                 }
@@ -172,17 +226,10 @@ public class AssetService {
             }
         }
 
-        String caller = currentCaller();
-
         existing.setStatus(newStatus);
-        existing.setLastModifiedBy(caller);
+        existing.setLastModifiedBy(currentCaller());
 
         Asset updated = assetRepository.save(existing);
-
-        // NOTE: Status-change history is no longer recorded here.
-        // The asset-assignment service is now the single owner of asset history.
-        // previousStatus/newStatus/caller/reason are still available above if that
-        // service needs to be notified (e.g. via an event or a call) in future.
 
         return AssetMapper.toResponseDTO(updated);
     }
@@ -204,33 +251,98 @@ public class AssetService {
 
     @Transactional
     public void deleteAsset(UUID id) {
+
         Asset existing = findAssetOrThrow(id);
+
+        if (existing.isDeleted()) {
+
+            throw new IllegalArgumentException(
+                    "Asset is already deleted.");
+        }
+
+        if (existing.getStatus() == AssetStatus.ASSIGNED) {
+
+            throw new IllegalArgumentException(
+                    "Assigned assets cannot be deleted.");
+        }
+
+        if (existing.getStatus() == AssetStatus.MAINTENANCE) {
+
+            throw new IllegalArgumentException(
+                    "Assets under maintenance cannot be deleted.");
+        }
+
         existing.setDeleted(true);
         existing.setDeletedAt(java.time.LocalDateTime.now());
         existing.setLastModifiedBy(currentCaller());
+
         assetRepository.save(existing);
     }
-
     public DashboardSummaryDTO getDashboardSummary() {
+
         long totalAssets = assetRepository.count();
 
+        long deletedAssets =
+                assetRepository.findByDeletedTrue().size();
+
+        long availableAssets =
+                assetRepository.countByStatusAndDeletedFalse(
+                        AssetStatus.AVAILABLE);
+
+        long assignedAssets =
+                assetRepository.countByStatusAndDeletedFalse(
+                        AssetStatus.ASSIGNED);
+
+        long maintenanceAssets =
+                assetRepository.countByStatusAndDeletedFalse(
+                        AssetStatus.MAINTENANCE);
+
         Map<String, Long> countByStatus = new HashMap<>();
+
         for (AssetStatus status : AssetStatus.values()) {
-            countByStatus.put(status.name(), assetRepository.countByStatus(status));
+
+            countByStatus.put(
+                    status.name(),
+                    assetRepository.countByStatusAndDeletedFalse(status));
         }
 
         Map<String, Long> countByType = new HashMap<>();
+
         for (String type : assetRepository.findDistinctAssetTypes()) {
-            countByType.put(type, assetRepository.countByAssetType(type));
+
+            countByType.put(
+                    type,
+                    assetRepository.countByAssetType(type));
         }
 
+        List<AssetResponseDTO> latestAssets =
+                assetRepository.findTop5ByDeletedFalseOrderByCreatedAtDesc()
+                        .stream()
+                        .map(AssetMapper::toResponseDTO)
+                        .toList();
+
         return DashboardSummaryDTO.builder()
+
                 .totalAssets(totalAssets)
+
+                .availableAssets(availableAssets)
+
+                .assignedAssets(assignedAssets)
+
+                .maintenanceAssets(maintenanceAssets)
+
+                .deletedAssets(deletedAssets)
+
                 .countByStatus(countByStatus)
+
                 .countByType(countByType)
+
+                .totalAssetTypes(countByType.size())
+
+                .latestAssets(latestAssets)
+
                 .build();
     }
-
 
     public BulkUploadResultDTO bulkCreateAssets(List<AssetRequestDTO> requests) {
 
@@ -254,7 +366,7 @@ public class AssetService {
 
             try {
                 seenInBatch.add(dto.getSerialNumber());
-                created.add(createAsset(dto));
+                created.add(createAsset(dto, null));
             } catch (DuplicateAssetException ex) {
                 errors.add(BulkUploadResultDTO.RowError.builder()
                         .rowNumber(rowNumber)
@@ -323,7 +435,7 @@ public class AssetService {
 
             try {
                 seenInBatch.add(dto.getSerialNumber());
-                created.add(createAsset(dto));
+                created.add(createAsset(dto, null));
 
             } catch (DuplicateAssetException ex) {
                 errors.add(BulkUploadResultDTO.RowError.builder()
@@ -363,6 +475,9 @@ public class AssetService {
         if (!StringUtils.hasText(dto.getSerialNumber())) {
             return "serialNumber is required.";
         }
+        if (!StringUtils.hasText(dto.getBrand())) {
+            return "brand is required.";
+        }
         if (seenInBatch.contains(dto.getSerialNumber())) {
             return "Duplicate serial number within this upload: " + dto.getSerialNumber();
         }
@@ -374,13 +489,69 @@ public class AssetService {
                 .orElseThrow(() -> new ResourceNotFoundException("Asset not found with id: " + id));
     }
     public List<AssetSummaryDTO> getAllAssetsSummary() {
-        return assetRepository.findAll().stream()
-                .map(asset -> AssetSummaryDTO.builder()
-                        .id(asset.getId())
-                        .assetName(asset.getAssetName())
-                        .status(asset.getStatus().name())
-                        .assetType(asset.getAssetType())
-                        .build())
+
+        return assetRepository.findAll()
+                .stream()
+                .map(AssetMapper::toSummaryDTO)
                 .toList();
+    }
+
+    public AssetSummaryDTO getAssetSummary(UUID id) {
+
+        Asset asset = findAssetOrThrow(id);
+
+        return AssetMapper.toSummaryDTO(asset);
+    }
+    public List<AssetResponseDTO> getDeletedAssets() {
+
+        return assetRepository.findByDeletedTrue()
+                .stream()
+                .map(AssetMapper::toResponseDTO)
+                .toList();
+
+    }
+    @Transactional
+    public AssetResponseDTO restoreAsset(UUID id) {
+
+        Asset asset = assetRepository.findByIdAndDeletedTrue(id)
+                .orElseThrow(() ->
+                        new ResourceNotFoundException(
+                                "Deleted asset not found with id : " + id));
+
+        asset.setDeleted(false);
+        asset.setDeletedAt(null);
+        asset.setLastModifiedBy(currentCaller());
+
+        Asset restored = assetRepository.save(asset);
+
+        return AssetMapper.toResponseDTO(restored);
+    }
+
+    public Page<AssetResponseDTO> filterAssets(
+            String assetName,
+            String assetType,
+            AssetStatus status,
+            String serialNumber,
+            int page,
+            int size,
+            String sortBy,
+            String direction
+    ) {
+
+        Sort sort = direction.equalsIgnoreCase("desc")
+                ? Sort.by(sortBy).descending()
+                : Sort.by(sortBy).ascending();
+
+        Pageable pageable = PageRequest.of(page, size, sort);
+
+        Page<Asset> assets = assetRepository.findAll(
+                AssetSpecification.filter(
+                        assetName,
+                        assetType,
+                        status,
+                        serialNumber),
+                pageable);
+
+        return assets.map(AssetMapper::toResponseDTO);
     }
 }

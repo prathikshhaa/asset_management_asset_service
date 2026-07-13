@@ -7,11 +7,7 @@ import org.apache.poi.ss.usermodel.*;
 
 import java.io.IOException;
 import java.io.InputStream;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Locale;
-import java.util.Map;
+import java.util.*;
 
 
 public final class ExcelAssetParser {
@@ -130,7 +126,8 @@ public final class ExcelAssetParser {
             return AssetStatus.valueOf(value.trim().toUpperCase(Locale.ROOT));
         } catch (IllegalArgumentException ex) {
             throw new IllegalArgumentException(
-                    "Invalid status value '" + value + "'. Allowed values: AVAILABLE, ASSIGNED, MAINTENANCE");
+                    "Invalid status '" + value + "'. Allowed values: "
+                            + Arrays.toString(AssetStatus.values()));
         }
     }
 }
