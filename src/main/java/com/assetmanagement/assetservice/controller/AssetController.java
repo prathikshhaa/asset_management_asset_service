@@ -17,6 +17,9 @@ import java.io.IOException;
 import java.util.List;
 import java.util.UUID;
 
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+
+@SecurityRequirement(name = "bearerAuth")
 @RestController
 @RequestMapping("/assets")
 @RequiredArgsConstructor

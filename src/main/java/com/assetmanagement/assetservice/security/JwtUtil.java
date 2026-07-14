@@ -8,6 +8,7 @@ import org.springframework.stereotype.Component;
 
 import javax.crypto.SecretKey;
 import java.nio.charset.StandardCharsets;
+import java.util.List;
 
 @Component
 public class JwtUtil {
@@ -31,11 +32,23 @@ public class JwtUtil {
     }
 
     @SuppressWarnings("unchecked")
-    public java.util.List<String> extractRoles(String token) {
-        Object roles = parseClaims(token).get("roles");
-        if (roles instanceof java.util.List<?> list) {
-            return (java.util.List<String>) list;
+    public List<String> extractRoles(String token) {
+
+        Claims claims = parseClaims(token);
+
+        // Supports both "roles" and "role"
+        Object roles = claims.get("roles");
+
+        if (roles instanceof List<?> list) {
+            return (List<String>) list;
         }
-        return java.util.List.of();
+
+        Object role = claims.get("role");
+
+        if (role instanceof String roleName) {
+            return List.of(roleName);
+        }
+
+        return List.of();
     }
 }

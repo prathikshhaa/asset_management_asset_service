@@ -50,8 +50,8 @@ management:
 
 security:
   jwt:
-    enabled: ${JWT_ENABLED:false}
-    secret: ${JWT_SECRET:change-this-to-a-long-random-shared-secret-min-32-chars}
+    enabled: ${JWT_ENABLED:true}
+    secret: ${JWT_SECRET:8b7c4d2a9f1e6c3b5d8a7f2c9e1b4d6a8c5f7e9d2b1c6a4f}
   internal:
     api-key: ${INTERNAL_API_KEY:pass123}
 
