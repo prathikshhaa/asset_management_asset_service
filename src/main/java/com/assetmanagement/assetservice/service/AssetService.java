@@ -7,6 +7,7 @@ import com.assetmanagement.assetservice.exception.DuplicateAssetException;
 import com.assetmanagement.assetservice.exception.FileProcessingException;
 import com.assetmanagement.assetservice.exception.ResourceNotFoundException;
 import com.assetmanagement.assetservice.repository.AssetRepository;
+import com.assetmanagement.assetservice.service.client.LogServiceClient;
 import com.assetmanagement.assetservice.specification.AssetSpecification;
 import com.assetmanagement.assetservice.util.AssetMapper;
 import com.assetmanagement.assetservice.util.ExcelAssetParser;
@@ -19,7 +20,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 import org.springframework.web.multipart.MultipartFile;
-
+import com.assetmanagement.assetservice.dto.AssetLogRequest;
+import java.time.LocalDateTime;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -35,7 +37,7 @@ import java.util.UUID;
 public class AssetService {
 
     private final FileStorageService fileStorageService;
-
+private final LogServiceClient logServiceClient;
     private final AssetRepository assetRepository;
 
     private void validateAsset(AssetRequestDTO requestDTO){
@@ -78,7 +80,10 @@ public class AssetService {
 
 
         Asset saved = assetRepository.save(asset);
-
+        sendAssetLog(
+                saved.getId(),
+                "ASSET_CREATED",
+                "Asset created successfully");
         return AssetMapper.toResponseDTO(saved);
     }
     public Page<AssetResponseDTO> getAllAssets(int page,
@@ -165,7 +170,10 @@ public class AssetService {
         existing.setLastModifiedBy(currentCaller());
 
         Asset updated = assetRepository.save(existing);
-
+        sendAssetLog(
+                updated.getId(),
+                "ASSET_UPDATED",
+                "Asset updated successfully");
         return AssetMapper.toResponseDTO(updated);
     }
 
@@ -183,7 +191,11 @@ public class AssetService {
         existing.setLastModifiedBy(currentCaller());
 
         Asset updated = assetRepository.save(existing);
-
+        sendAssetLog(
+                updated.getId(),
+                "ASSET_UPDATED",
+                "Asset details updated"
+        );
         return AssetMapper.toResponseDTO(updated);
     }
 
@@ -230,7 +242,10 @@ public class AssetService {
         existing.setLastModifiedBy(currentCaller());
 
         Asset updated = assetRepository.save(existing);
-
+        sendAssetLog(
+                updated.getId(),
+                "STATUS_UPDATED",
+                "Status changed to " + updated.getStatus());
         return AssetMapper.toResponseDTO(updated);
     }
 
@@ -277,6 +292,10 @@ public class AssetService {
         existing.setLastModifiedBy(currentCaller());
 
         assetRepository.save(existing);
+        sendAssetLog(
+                existing.getId(),
+                "ASSET_DELETED",
+                "Asset deleted");
     }
     public DashboardSummaryDTO getDashboardSummary() {
 
@@ -523,7 +542,10 @@ public class AssetService {
         asset.setLastModifiedBy(currentCaller());
 
         Asset restored = assetRepository.save(asset);
-
+        sendAssetLog(
+                restored.getId(),
+                "ASSET_RESTORED",
+                "Asset restored");
         return AssetMapper.toResponseDTO(restored);
     }
 
@@ -553,5 +575,17 @@ public class AssetService {
                 pageable);
 
         return assets.map(AssetMapper::toResponseDTO);
+    }
+    private void sendAssetLog(UUID assetId, String action, String details) {
+
+        AssetLogRequest log = new AssetLogRequest();
+
+        log.setAssetId(assetId);
+        log.setAction(action);
+        log.setPerformedBy(currentCaller());
+        log.setDetails(details);
+        log.setTimestamp(LocalDateTime.now());
+
+        logServiceClient.createLog(log);
     }
 }
